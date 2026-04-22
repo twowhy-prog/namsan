@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>남산터널 혼잡도</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0f14; --surface: #151820; --surface2: #1c2030;
+    --border: #252a3a; --text: #e8eaf0; --text-muted: #5a6070;
+    --text-dim: #8890a0; --green: #22d98a; --yellow: #f5c842;
+    --red: #f04a6a; --accent: #4a9eff;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:'Noto Sans KR',sans-serif; min-height:100vh; overflow-x:hidden; }
+  body::before {
+    content:''; position:fixed; inset:0;
+    background-image: linear-gradient(var(--border) 1px,transparent 1px), linear-gradient(90deg,var(--border) 1px,transparent 1px);
+    background-size:40px 40px; opacity:.3; pointer-events:none; z-index:0;
+  }
+  .container { position:relative; z-index:1; max-width:420px; margin:0 auto; padding:24px 16px 40px; }
+
+  /* 헤더 */
+  .header { margin-bottom:24px; }
+  .route-label { font-size:11px; font-family:'DM Mono',monospace; color:var(--text-muted); letter-spacing:.15em; text-transform:uppercase; margin-bottom:6px; }
+  .route-title { font-size:22px; font-weight:900; letter-spacing:-.5px; display:flex; align-items:center; gap:10px; }
+  .route-arrow { color:var(--accent); font-size:18px; }
+  .meta-row { display:flex; align-items:center; justify-content:space-between; margin-top:10px; }
+  .time-info { font-family:'DM Mono',monospace; font-size:12px; color:var(--text-muted); }
+  .time-info span { color:var(--text-dim); }
+  .refresh-btn {
+    background:var(--surface2); border:1px solid var(--border); color:var(--text-dim);
+    border-radius:8px; padding:6px 12px; font-size:12px; font-family:'Noto Sans KR',sans-serif;
+    cursor:pointer; display:flex; align-items:center; gap:5px; transition:all .2s;
+  }
+  .refresh-btn:hover { border-color:var(--accent); color:var(--accent); }
+  .refresh-icon { display:inline-block; }
+  .refresh-btn.spinning .refresh-icon { animation:spin .6s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  /* 배너 */
+  .notice { border-radius:10px; padding:8px 14px; font-size:11px; margin-bottom:10px; text-align:center; font-family:'DM Mono',monospace; display:none; }
+  .notice.active { display:block; }
+  .notice.warn { background:rgba(245,200,66,.08); border:1px solid rgba(245,200,66,.25); color:var(--yellow); }
+  .notice.err  { background:rgba(240,74,106,.1);  border:1px solid rgba(240,74,106,.3);  color:var(--red); }
+  .notice.info { background:rgba(74,158,255,.08); border:1px solid rgba(74,158,255,.25); color:var(--accent); }
+  .source-tag {
+    display:inline-flex; align-items:center; gap:4px;
+    font-size:10px; font-family:'DM Mono',monospace; color:var(--text-muted);
+    background:var(--surface2); border:1px solid var(--border);
+    border-radius:6px; padding:2px 7px; margin-bottom:12px;
+  }
+  .source-tag.kakao { border-color:rgba(254,229,0,.3); color:#c8b800; background:rgba(254,229,0,.05); }
+
+  /* 카드 */
+  .cards { display:flex; flex-direction:column; gap:12px; margin-bottom:20px; }
+  .card {
+    background:var(--surface); border:1px solid var(--border); border-radius:16px;
+    padding:18px 20px; position:relative; overflow:hidden;
+    transition:transform .2s, border-color .2s;
+    animation:fadeUp .4s ease both;
+  }
+  .card:nth-child(1){animation-delay:.05s} .card:nth-child(2){animation-delay:.12s} .card:nth-child(3){animation-delay:.19s}
+  .card:hover { transform:translateY(-2px); }
+  .card.recommended { border-color:var(--green); background:linear-gradient(135deg,#151820 0%,#0d1a12 100%); }
+  .card.recommended::before {
+    content:''; position:absolute; top:0; left:0; right:0; height:2px;
+    background:linear-gradient(90deg,transparent,var(--green),transparent);
+  }
+  .card::after {
+    content:''; position:absolute; left:0; top:20%; bottom:20%; width:3px;
+    border-radius:0 2px 2px 0; background:var(--status-color,var(--border));
+  }
+  @keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+
+  .card-top { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:14px; }
+  .tunnel-name { font-size:18px; font-weight:700; letter-spacing:-.3px; }
+  .tunnel-sub { font-size:12px; color:var(--text-muted); margin-top:3px; font-family:'DM Mono',monospace; }
+  .badges { display:flex; flex-direction:column; align-items:flex-end; gap:5px; }
+  .badge-rec  { background:var(--green); color:#000; font-size:10px; font-weight:700; padding:3px 8px; border-radius:20px; }
+  .badge-cong { font-size:11px; font-weight:700; padding:3px 9px; border-radius:20px; }
+  .badge-green  { background:rgba(34,217,138,.15); color:var(--green); }
+  .badge-yellow { background:rgba(245,200,66,.15);  color:var(--yellow); }
+  .badge-red    { background:rgba(240,74,106,.15);  color:var(--red); }
+  .badge-gray   { background:rgba(90,96,112,.15);   color:var(--text-muted); }
+
+  .card-stats { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
+  .stat { background:var(--surface2); border-radius:10px; padding:10px 10px; }
+  .stat.hl { border:1px solid rgba(34,217,138,.25); background:rgba(34,217,138,.06); }
+  .stat-label { font-size:9px; color:var(--text-muted); font-family:'DM Mono',monospace; letter-spacing:.06em; text-transform:uppercase; margin-bottom:4px; }
+  .stat-value { font-size:19px; font-weight:700; font-family:'DM Mono',monospace; line-height:1; }
+  .stat-unit  { font-size:11px; color:var(--text-muted); font-weight:400; margin-left:1px; }
+
+  .speed-bar-wrap { margin-top:12px; height:4px; background:var(--surface2); border-radius:2px; overflow:hidden; }
+  .speed-bar { height:100%; border-radius:2px; transition:width .8s cubic-bezier(.4,0,.2,1); }
+
+  /* 요약 + 버튼 */
+  .summary { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:18px 20px; margin-bottom:14px; }
+  .summary-label { font-size:11px; font-family:'DM Mono',monospace; color:var(--text-muted); letter-spacing:.12em; text-transform:uppercase; margin-bottom:6px; }
+  .summary-text  { font-size:15px; font-weight:500; line-height:1.6; }
+  .summary-text strong { color:var(--green); }
+  .map-btn {
+    display:block; width:100%; background:#FEE500; color:#000;
+    font-family:'Noto Sans KR',sans-serif; font-size:15px; font-weight:700;
+    text-align:center; text-decoration:none; padding:15px; border-radius:14px;
+    border:none; cursor:pointer; transition:opacity .2s, transform .1s;
+  }
+  .map-btn:hover { opacity:.9; } .map-btn:active { transform:scale(.99); }
+  .auto-refresh { text-align:center; font-size:11px; font-family:'DM Mono',monospace; color:var(--text-muted); margin-top:16px; }
+
+  /* 로딩 */
+  .loading-overlay {
+    display:none; position:fixed; inset:0; background:rgba(13,15,20,.85);
+    z-index:100; align-items:center; justify-content:center; flex-direction:column; gap:14px;
+  }
+  .loading-overlay.active { display:flex; }
+  .loader { width:36px; height:36px; border:3px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite; }
+  .loading-text { font-size:13px; color:var(--text-muted); font-family:'DM Mono',monospace; }
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loader"></div>
+  <div class="loading-text" id="loadingText">경로 소요시간 조회 중...</div>
+</div>
+
+<div class="container">
+  <div class="header">
+    <div class="route-label">실시간 경로 선택</div>
+    <div class="route-title">삼일대로330 <span class="route-arrow">→</span> 원베일리</div>
+    <div class="meta-row">
+      <div class="time-info"><span id="currentTime">--:--</span> 기준</div>
+      <button class="refresh-btn" id="refreshBtn" onclick="fetchAll()">
+        <span class="refresh-icon">↻</span> 새로고침
+      </button>
+    </div>
+  </div>
+
+  <div class="notice warn" id="mockBanner">⚠ 시뮬레이션 데이터 표시 중</div>
+  <div class="notice err"  id="errorBanner">데이터를 불러올 수 없습니다.</div>
+  <div class="notice info" id="infoBanner"></div>
+  <div id="sourceWrap"></div>
+
+  <div class="cards" id="cardsContainer"></div>
+
+  <div class="summary">
+    <div class="summary-label">추천 경로</div>
+    <div class="summary-text" id="summaryText">—</div>
+  </div>
+
+  <a class="map-btn" id="mapBtn" href="#" target="_blank">🗺 카카오맵으로 길찾기</a>
+  <div class="auto-refresh" id="autoRefreshText">30초 후 자동 갱신</div>
+</div>
+
+<script>
+// ── 설정 ──────────────────────────────────────────────────
+const KAKAO_KEY     = 'b94d7e07aed2c0765cd3e375e84b24b2';
+const SEOUL_KEY     = '6b5641785574776f3934586d49584d';
+const SEOUL_URL     = `http://openapi.seoul.go.kr:8088/${SEOUL_KEY}/json/TrafficInfo/1/500/`;
+
+// 출발 / 도착 (경도, 위도)
+const ORIGIN = { x: 126.9786, y: 37.5666 };  // 삼일대로330 을지로입구
+const DEST   = { x: 127.0064, y: 37.5082 };  // 원베일리 반포동
+
+const TUNNELS = [
+  {
+    id:1, name:'남산 1호 터널', sub:'소월로 → 한강대교',
+    wp: { x:126.9816, y:37.5478 },
+    kakaoVia:'남산1호터널',
+    skw:['남산1호','남산 1호','소월로'],
+    segs:[
+      {d:0.8, fb:25, kw:['삼일대로','퇴계로']},
+      {d:1.2, fb:30, kw:['소월로']},
+      {d:1.6, fb:40, kw:['남산1호','남산 1호']},
+      {d:1.4, fb:50, kw:['한강대교']},
+      {d:3.2, fb:30, kw:['신반포로','반포로']},
+    ],
+  },
+  {
+    id:2, name:'남산 2호 터널', sub:'퇴계로 → 반포대교',
+    wp: { x:126.9944, y:37.5465 },
+    kakaoVia:'남산2호터널',
+    skw:['남산2호','남산 2호','퇴계로'],
+    segs:[
+      {d:0.9, fb:25, kw:['삼일대로','퇴계로']},
+      {d:1.7, fb:45, kw:['남산2호','남산 2호']},
+      {d:0.9, fb:55, kw:['반포대교']},
+      {d:1.8, fb:35, kw:['반포로','신반포로']},
+    ],
+  },
+  {
+    id:3, name:'남산 3호 터널', sub:'이태원로 → 한남대교',
+    wp: { x:127.0042, y:37.5452 },
+    kakaoVia:'남산3호터널',
+    skw:['남산3호','남산 3호','이태원로'],
+    segs:[
+      {d:1.3, fb:22, kw:['장충단로','을지로']},
+      {d:1.1, fb:28, kw:['이태원로']},
+      {d:1.5, fb:42, kw:['남산3호','남산 3호']},
+      {d:1.4, fb:52, kw:['한남대교']},
+      {d:3.5, fb:28, kw:['반포로','동작대로']},
+    ],
+  },
+];
+
+// ── 카카오 모빌리티 길찾기 API ──────────────────────────
+async function kakaoRoute(t) {
+  const url =
+    `https://apis-navi.kakaomobility.com/v1/directions` +
+    `?origin=${ORIGIN.x},${ORIGIN.y}` +
+    `&destination=${DEST.x},${DEST.y}` +
+    `&waypoints=${t.wp.x},${t.wp.y}` +
+    `&priority=TIME&car_fuel=GASOLINE&car_hipass=false`;
+
+  const r = await fetch(url, {
+    headers:{ Authorization:`KakaoAK ${KAKAO_KEY}` },
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!r.ok) throw new Error(`kakao ${r.status}`);
+  const j = await r.json();
+  const route = j.routes?.[0];
+  if (!route || route.result_code !== 0) throw new Error('no route');
+  const s = route.summary;
+  return {
+    totalTime: Math.round(s.duration / 60),
+    totalDist: Math.round(s.distance / 100) / 10,
+  };
+}
+
+// ── 서울 도로소통 API (터널 구간 속도) ─────────────────
+function seoulSpeed(items, kws) {
+  const m = items.find(i => kws.some(k => (i.ROAD_NAME||'').includes(k)));
+  return m ? Math.max(5, Math.round(+m.SPEED)) : null;
+}
+
+// ── fallback 구간합산 ───────────────────────────────────
+function fallback(t, items) {
+  let min = 0, tspeed = null;
+  t.segs.forEach(s => {
+    const m = items.find(i => s.kw.some(k => (i.ROAD_NAME||'').includes(k)));
+    const spd = m ? Math.max(5, Math.round(+m.SPEED)) : s.fb;
+    if (s.kw.some(k => k.includes('남산'))) tspeed = spd;
+    min += (s.d / spd) * 60;
+  });
+  return { totalTime: Math.round(min), tunnelSpeed: tspeed };
+}
+
+// ── 목업 ───────────────────────────────────────────────
+function mockData() {
+  return TUNNELS.map((t,i) => {
+    const base = [22,18,26][i];
+    const n = Math.floor((Math.random()-.5)*6);
+    return { ...t, totalTime:base+n, totalDist:null, tunnelSpeed:Math.floor(Math.random()*30+20), src:'mock' };
+  });
+}
+
+// ── 혼잡도 ─────────────────────────────────────────────
+function cong(spd) {
+  if (!spd) return { label:'정보없음', cls:'badge-gray', color:'#5a6070' };
+  if (spd>=40) return { label:'원활', cls:'badge-green', color:'#22d98a' };
+  if (spd>=20) return { label:'서행', cls:'badge-yellow', color:'#f5c842' };
+  return { label:'정체', cls:'badge-red', color:'#f04a6a' };
+}
+
+// ── 카드 렌더 ──────────────────────────────────────────
+function render(data) {
+  const sorted  = [...data].sort((a,b)=>(a.totalTime||99)-(b.totalTime||99));
+  const recId   = sorted[0]?.id;
+  const recTime = sorted[0]?.totalTime;
+  const isKakao = data.some(d=>d.src==='kakao');
+  const isMock  = data.every(d=>d.src==='mock');
+
+  // 출처 태그
+  document.getElementById('sourceWrap').innerHTML = isKakao
+    ? `<span class="source-tag kakao">🟡 카카오 모빌리티 실시간</span>`
+    : isMock ? `<span class="source-tag">⚠ 시뮬레이션</span>`
+             : `<span class="source-tag">서울 도로소통 합산</span>`;
+
+  const wrap = document.getElementById('cardsContainer');
+  wrap.innerHTML = '';
+
+  data.forEach(t => {
+    const c      = cong(t.tunnelSpeed);
+    const isRec  = t.id === recId;
+    const extra  = (!isRec && t.totalTime && recTime) ? t.totalTime - recTime : 0;
+    const barW   = t.tunnelSpeed ? Math.min((t.tunnelSpeed/80)*100,100) : 0;
+
+    const card = document.createElement('div');
+    card.className = `card${isRec?' recommended':''}`;
+    card.style.setProperty('--status-color', c.color);
+    card.innerHTML = `
+      <div class="card-top">
+        <div>
+          <div class="tunnel-name">${t.name}</div>
+          <div class="tunnel-sub">${t.sub}</div>
+        </div>
+        <div class="badges">
+          ${isRec?'<span class="badge-rec">✓ 추천</span>':''}
+          <span class="badge-cong ${c.cls}">${c.label}</span>
+        </div>
+      </div>
+      <div class="card-stats">
+        <div class="stat">
+          <div class="stat-label">터널속도</div>
+          <div class="stat-value" style="color:${c.color}">
+            ${t.tunnelSpeed??'--'}<span class="stat-unit">km/h</span>
+          </div>
+        </div>
+        <div class="stat${isRec?' hl':''}">
+          <div class="stat-label">원베일리까지</div>
+          <div class="stat-value" style="${isRec?'color:var(--green)':''}">
+            ${t.totalTime??'--'}<span class="stat-unit">분</span>
+          </div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">${isRec?'거리':'차이'}</div>
+          <div class="stat-value" style="font-size:15px;color:${isRec?'var(--green)':'var(--text-muted)'}">
+            ${isRec
+              ? (t.totalDist?`${t.totalDist}<span class="stat-unit">km</span>`:'최단')
+              : `+${extra}<span class="stat-unit">분</span>`}
+          </div>
+        </div>
+      </div>
+      <div class="speed-bar-wrap">
+        <div class="speed-bar" style="width:${barW}%;background:${c.color}"></div>
+      </div>`;
+    wrap.appendChild(card);
+  });
+
+  // 요약
+  const rec  = data.find(t=>t.id===recId);
+  const rc   = cong(rec?.tunnelSpeed);
+  document.getElementById('summaryText').innerHTML =
+    `지금은 <strong>${rec?.name}</strong> 경유가 가장 빠릅니다.<br>` +
+    `원베일리까지 약 <strong>${rec?.totalTime??'--'}분</strong>` +
+    (rec?.totalDist ? ` · ${rec.totalDist}km` : '') +
+    ` · 터널 ${rc.label}`;
+
+  // 카카오맵 버튼
+  const via = encodeURIComponent(rec?.kakaoVia||'남산2호터널');
+  document.getElementById('mapBtn').href =
+    `https://map.kakao.com/?sName=${encodeURIComponent('삼일대로330')}&eName=${encodeURIComponent('원베일리아파트')}&via=${via}`;
+}
+
+// ── 메인 ───────────────────────────────────────────────
+async function fetchAll() {
+  const btn = document.getElementById('refreshBtn');
+  btn.classList.add('spinning');
+  ['mockBanner','errorBanner','infoBanner'].forEach(id=>document.getElementById(id).classList.remove('active'));
+  document.getElementById('loadingOverlay').classList.add('active');
+  document.getElementById('currentTime').textContent =
+    new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+
+  // 카카오 3경로 + 서울 속도 병렬 호출
+  const [kakaoRes, seoulItems] = await Promise.all([
+    Promise.allSettled(TUNNELS.map(t => kakaoRoute(t))),
+    fetch(SEOUL_URL, {signal:AbortSignal.timeout(5000)})
+      .then(r=>r.json()).then(j=>j?.TrafficInfo?.row||[]).catch(()=>[]),
+  ]);
+
+  const allFailed = kakaoRes.every(r=>r.status==='rejected');
+
+  if (!allFailed) {
+    const tunnelData = TUNNELS.map((t,i) => {
+      const tspd = seoulSpeed(seoulItems, t.skw);
+      if (kakaoRes[i].status === 'fulfilled') {
+        const v = kakaoRes[i].value;
+        // 터널 속도: 서울 API 값 우선, 없으면 카카오 시간 역산
+        const spd = tspd ?? Math.min(80, Math.round(([1.6,1.7,1.5][i] / (v.totalTime*0.25)) * 60));
+        return { ...t, totalTime:v.totalTime, totalDist:v.totalDist, tunnelSpeed:spd, src:'kakao' };
+      } else {
+        const fb = fallback(t, seoulItems);
+        return { ...t, totalTime:fb.totalTime, totalDist:null, tunnelSpeed:tspd??fb.tunnelSpeed, src:'seoul' };
+      }
+    });
+    render(tunnelData);
+    const failN = kakaoRes.filter(r=>r.status==='rejected').length;
+    if (failN) showInfo(`${failN}개 경로는 구간 합산으로 대체`);
+
+  } else if (seoulItems.length) {
+    const tunnelData = TUNNELS.map(t => {
+      const fb = fallback(t, seoulItems);
+      return { ...t, ...fb, totalDist:null, src:'seoul' };
+    });
+    render(tunnelData);
+    showInfo('카카오 연결 실패 — 서울 도로소통 합산 표시');
+
+  } else {
+    document.getElementById('mockBanner').classList.add('active');
+    render(mockData());
+  }
+
+  document.getElementById('loadingOverlay').classList.remove('active');
+  btn.classList.remove('spinning');
+  startCountdown();
+}
+
+function showInfo(msg) {
+  const el = document.getElementById('infoBanner');
+  el.textContent = msg; el.classList.add('active');
+}
+
+let timer = null;
+function startCountdown() {
+  if (timer) clearInterval(timer);
+  let s = 30;
+  const el = document.getElementById('autoRefreshText');
+  el.textContent = `${s}초 후 자동 갱신`;
+  timer = setInterval(()=>{
+    s--;
+    if (s<=0) { clearInterval(timer); fetchAll(); }
+    else el.textContent = `${s}초 후 자동 갱신`;
+  }, 1000);
+}
+
+fetchAll();
+</script>
+</body>
+</html>
