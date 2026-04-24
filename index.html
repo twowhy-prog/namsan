@@ -23,7 +23,9 @@
 
   /* 헤더 */
   .header { margin-bottom:24px; }
-  .route-label { font-size:11px; font-family:'DM Mono',monospace; color:var(--text-muted); letter-spacing:.15em; text-transform:uppercase; margin-bottom:6px; }
+  .header-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+  .route-label { font-size:11px; font-family:'DM Mono',monospace; color:var(--text-muted); letter-spacing:.15em; text-transform:uppercase; }
+  .update-date { font-size:10px; font-family:'DM Mono',monospace; color:var(--text-muted); }
   .route-title { font-size:22px; font-weight:900; letter-spacing:-.5px; display:flex; align-items:center; gap:10px; }
   .route-arrow { color:var(--accent); font-size:18px; }
   .meta-row { display:flex; align-items:center; justify-content:space-between; margin-top:10px; }
@@ -128,7 +130,10 @@
 
 <div class="container">
   <div class="header">
-    <div class="route-label">실시간 경로 선택</div>
+    <div class="header-top">
+      <div class="route-label">실시간 경로 선택</div>
+      <div class="update-date">updated 2026.04.24</div>
+    </div>
     <div class="route-title">삼일대로330 <span class="route-arrow">→</span> 원베일리</div>
     <div class="meta-row">
       <div class="time-info"><span id="currentTime">--:--</span> 기준</div>
