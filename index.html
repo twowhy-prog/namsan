@@ -186,9 +186,9 @@ const ROUTE_CONFIGS = [
     originName: '삼일대로330',
     destName: '원베일리',
     kakaoOrigin: '삼일대로330',
-    kakaoDest: '원베일리아파트',
+    kakaoDest: '반포대교남단 한강시민공원입구',
     origin: { x: 126.9786, y: 37.5666 },
-    dest:   { x: 127.0064, y: 37.5082 },
+    dest:   { x: 127.0044, y: 37.5097 },  // 반포대교남단.한강시민공원입구
     destLabel: '원베일리까지',
     speedLabel: '터널속도',
     mockBases: [22, 18, 26],
@@ -196,7 +196,7 @@ const ROUTE_CONFIGS = [
     options: [
       {
         id:1, name:'남산 1호 터널', sub:'삼일대로 → 이태원역 → 반포대교',
-        wp: { x:126.9816, y:37.5478 },
+        wp: { x:126.9826, y:37.5443 },  // 남산1호 터널 내부
         kakaoVia: '남산1호터널',
         skw: ['남산1호','남산 1호','삼일대로'],
         segs: [
@@ -209,7 +209,7 @@ const ROUTE_CONFIGS = [
       },
       {
         id:2, name:'남산 2호 터널', sub:'퇴계로 → 반포대교',
-        wp: { x:126.9944, y:37.5465 },
+        wp: { x:126.9936, y:37.5461 },  // 남산2호 터널 내부
         kakaoVia: '남산2호터널',
         skw: ['남산2호','남산 2호','퇴계로'],
         segs: [
@@ -221,7 +221,7 @@ const ROUTE_CONFIGS = [
       },
       {
         id:3, name:'남산 3호 터널', sub:'회현사거리 → 이태원로 → 반포대교',
-        wp: { x:127.0042, y:37.5452 },
+        wp: { x:127.0048, y:37.5453 },  // 남산3호 터널 내부
         kakaoVia: '남산3호터널',
         skw: ['남산3호','남산 3호','회현','이태원로'],
         segs: [
@@ -237,9 +237,9 @@ const ROUTE_CONFIGS = [
   {
     originName: '원베일리',
     destName: '고덕로210',
-    kakaoOrigin: '원베일리아파트',
+    kakaoOrigin: '반포대교남단 한강시민공원입구',
     kakaoDest: '고덕로210',
-    origin: { x: 127.0064, y: 37.5082 },
+    origin: { x: 127.0044, y: 37.5097 },  // 반포대교남단.한강시민공원입구
     dest:   { x: 127.1487, y: 37.5535 },
     destLabel: '고덕로까지',
     speedLabel: '구간속도',
@@ -248,7 +248,7 @@ const ROUTE_CONFIGS = [
     options: [
       {
         id:1, name:'올림픽대로', sub:'반포IC → 올림픽대로 → 고덕로',
-        wp: { x:127.0857, y:37.5172 },
+        wp: { x:127.0854, y:37.5160 },  // 올림픽대로 잠실 부근
         kakaoVia: '올림픽대로',
         skw: ['올림픽대로'],
         segs: [
@@ -259,7 +259,7 @@ const ROUTE_CONFIGS = [
       },
       {
         id:2, name:'강변북로', sub:'반포대교 → 강변북로 → 고덕로',
-        wp: { x:127.0542, y:37.5427 },
+        wp: { x:127.0597, y:37.5382 },  // 강변북로 영동대교 북단 부근
         kakaoVia: '강변북로',
         skw: ['강변북로'],
         segs: [
