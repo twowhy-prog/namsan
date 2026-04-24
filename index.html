@@ -177,7 +177,7 @@
 </div>
 
 <script>
-const KAKAO_KEY = 'b94d7e07aed2c0765cd3e375e84b24b2';
+const TMAP_KEY = 'H2wUswZ2aq4Q5hXTVjHB4VA8t6RhHXt3xd6JY8M8';
 const SEOUL_KEY = '6b5641785574776f3934586d49584d';
 const SEOUL_URL = `http://openapi.seoul.go.kr:8088/${SEOUL_KEY}/json/TrafficInfo/1/500/`;
 
@@ -288,26 +288,30 @@ function switchRoute(idx) {
   fetchAll();
 }
 
-async function kakaoRoute(cfg, opt) {
-  const url =
-    `https://apis-navi.kakaomobility.com/v1/directions` +
-    `?origin=${cfg.origin.x},${cfg.origin.y}` +
-    `&destination=${cfg.dest.x},${cfg.dest.y}` +
-    `&waypoints=${opt.wp.x},${opt.wp.y}` +
-    `&priority=TIME&car_fuel=GASOLINE&car_hipass=false`;
-
-  const r = await fetch(url, {
-    headers: { Authorization: `KakaoAK ${KAKAO_KEY}` },
+async function tmapRoute(cfg, opt) {
+  const r = await fetch('https://apis.openapi.sk.com/tmap/routes?version=1', {
+    method: 'POST',
+    headers: { appKey: TMAP_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      startX: String(cfg.origin.x),
+      startY: String(cfg.origin.y),
+      endX: String(cfg.dest.x),
+      endY: String(cfg.dest.y),
+      passList: `${opt.wp.x},${opt.wp.y}`,
+      reqCoordType: 'WGS84GEO',
+      resCoordType: 'WGS84GEO',
+      searchOption: '0',
+      trafficInfo: 'Y',
+    }),
     signal: AbortSignal.timeout(8000),
   });
-  if (!r.ok) throw new Error(`kakao ${r.status}`);
+  if (!r.ok) throw new Error(`tmap ${r.status}`);
   const j = await r.json();
-  const route = j.routes?.[0];
-  if (!route || route.result_code !== 0) throw new Error('no route');
-  const s = route.summary;
+  const props = j.features?.[0]?.properties;
+  if (!props) throw new Error('no route');
   return {
-    totalTime: Math.round(s.duration / 60),
-    totalDist: Math.round(s.distance / 100) / 10,
+    totalTime: Math.round(props.totalTime / 60),
+    totalDist: Math.round(props.totalDistance / 100) / 10,
   };
 }
 
@@ -347,7 +351,7 @@ function render(cfg, data) {
   const sorted  = [...data].sort((a, b) => (a.totalTime || 99) - (b.totalTime || 99));
   const recId   = sorted[0]?.id;
   const recTime = sorted[0]?.totalTime;
-  const isKakao = data.some(d => d.src === 'kakao');
+  const isTmap = data.some(d => d.src === 'tmap');
   const isMock  = data.every(d => d.src === 'mock');
 
   // 헤더 타이틀
@@ -355,8 +359,8 @@ function render(cfg, data) {
     `${cfg.originName} <span class="route-arrow">→</span> ${cfg.destName}`;
 
   // 출처 태그
-  document.getElementById('sourceWrap').innerHTML = isKakao
-    ? `<span class="source-tag kakao">🟡 카카오 모빌리티 실시간</span>`
+  document.getElementById('sourceWrap').innerHTML = isTmap
+    ? `<span class="source-tag kakao">🔵 T맵 실시간</span>`
     : isMock
       ? `<span class="source-tag">⚠ 시뮬레이션</span>`
       : `<span class="source-tag">서울 도로소통 합산</span>`;
@@ -437,7 +441,7 @@ async function fetchAll() {
     new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
 
   const [kakaoRes, seoulItems] = await Promise.all([
-    Promise.allSettled(cfg.options.map(t => kakaoRoute(cfg, t))),
+    Promise.allSettled(cfg.options.map(t => tmapRoute(cfg, t))),
     fetch(SEOUL_URL, { signal: AbortSignal.timeout(5000) })
       .then(r => r.json()).then(j => j?.TrafficInfo?.row || []).catch(() => []),
   ]);
@@ -450,7 +454,7 @@ async function fetchAll() {
       if (kakaoRes[i].status === 'fulfilled') {
         const v = kakaoRes[i].value;
         const spd = tspd ?? Math.min(t.maxSpd, Math.round((t.segDist * 60) / (v.totalTime * t.segRatio)));
-        return { ...t, totalTime: v.totalTime, totalDist: v.totalDist, tunnelSpeed: spd, src: 'kakao' };
+        return { ...t, totalTime: v.totalTime, totalDist: v.totalDist, tunnelSpeed: spd, src: 'tmap' };
       } else {
         const fb = fallback(t, seoulItems);
         return { ...t, totalTime: fb.totalTime, totalDist: null, tunnelSpeed: tspd ?? fb.tunnelSpeed, src: 'seoul' };
