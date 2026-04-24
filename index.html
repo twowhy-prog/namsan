@@ -197,6 +197,7 @@ const ROUTE_CONFIGS = [
       {
         id:1, name:'남산 1호 터널', sub:'삼일대로 → 이태원역 → 반포대교',
         wp: { x:126.9826, y:37.5443 },  // 남산1호 터널 내부
+        segDist:1.6, segRatio:0.25, maxSpd:60,
         kakaoVia: '남산1호터널',
         skw: ['남산1호','남산 1호','삼일대로'],
         segs: [
@@ -210,6 +211,7 @@ const ROUTE_CONFIGS = [
       {
         id:2, name:'남산 2호 터널', sub:'퇴계로 → 반포대교',
         wp: { x:126.9936, y:37.5461 },  // 남산2호 터널 내부
+        segDist:1.7, segRatio:0.25, maxSpd:60,
         kakaoVia: '남산2호터널',
         skw: ['남산2호','남산 2호','퇴계로'],
         segs: [
@@ -222,6 +224,7 @@ const ROUTE_CONFIGS = [
       {
         id:3, name:'남산 3호 터널', sub:'회현사거리 → 이태원로 → 반포대교',
         wp: { x:127.0048, y:37.5453 },  // 남산3호 터널 내부
+        segDist:1.5, segRatio:0.25, maxSpd:60,
         kakaoVia: '남산3호터널',
         skw: ['남산3호','남산 3호','회현','이태원로'],
         segs: [
@@ -249,6 +252,7 @@ const ROUTE_CONFIGS = [
       {
         id:1, name:'올림픽대로', sub:'반포IC → 올림픽대로 → 고덕로',
         wp: { x:127.0854, y:37.5160 },  // 올림픽대로 잠실 부근
+        segDist:13.0, segRatio:0.72, maxSpd:100,
         kakaoVia: '올림픽대로',
         skw: ['올림픽대로'],
         segs: [
@@ -260,6 +264,7 @@ const ROUTE_CONFIGS = [
       {
         id:2, name:'강변북로', sub:'반포대교 → 강변북로 → 고덕로',
         wp: { x:127.0597, y:37.5382 },  // 강변북로 영동대교 북단 부근
+        segDist:12.0, segRatio:0.68, maxSpd:90,
         kakaoVia: '강변북로',
         skw: ['강변북로'],
         segs: [
@@ -444,7 +449,8 @@ async function fetchAll() {
       const tspd = seoulSpeed(seoulItems, t.skw);
       if (kakaoRes[i].status === 'fulfilled') {
         const v = kakaoRes[i].value;
-        return { ...t, totalTime: v.totalTime, totalDist: v.totalDist, tunnelSpeed: tspd, src: 'kakao' };
+        const spd = tspd ?? Math.min(t.maxSpd, Math.round((t.segDist * 60) / (v.totalTime * t.segRatio)));
+        return { ...t, totalTime: v.totalTime, totalDist: v.totalDist, tunnelSpeed: spd, src: 'kakao' };
       } else {
         const fb = fallback(t, seoulItems);
         return { ...t, totalTime: fb.totalTime, totalDist: null, tunnelSpeed: tspd ?? fb.tunnelSpeed, src: 'seoul' };
