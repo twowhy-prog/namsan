@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>남산터널 혼잡도</title>
+<title>실시간 경로 안내</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -20,6 +20,17 @@
     background-size:40px 40px; opacity:.3; pointer-events:none; z-index:0;
   }
   .container { position:relative; z-index:1; max-width:420px; margin:0 auto; padding:24px 16px 40px; }
+
+  /* 경로 탭 */
+  .route-tabs { display:flex; gap:8px; margin-bottom:20px; }
+  .route-tab {
+    flex:1; background:var(--surface); border:1px solid var(--border);
+    color:var(--text-muted); border-radius:10px; padding:10px 6px;
+    font-size:11px; font-family:'Noto Sans KR',sans-serif; font-weight:500;
+    cursor:pointer; transition:all .2s; text-align:center; line-height:1.4;
+  }
+  .route-tab.active { border-color:var(--accent); color:var(--accent); background:rgba(74,158,255,.08); }
+  .route-tab:hover:not(.active) { color:var(--text-dim); }
 
   /* 헤더 */
   .header { margin-bottom:24px; }
@@ -129,12 +140,18 @@
 </div>
 
 <div class="container">
+
+  <div class="route-tabs">
+    <button class="route-tab active" id="tab0" onclick="switchRoute(0)">삼일대로330<br>→ 원베일리</button>
+    <button class="route-tab" id="tab1" onclick="switchRoute(1)">원베일리<br>→ 고덕로210</button>
+  </div>
+
   <div class="header">
     <div class="header-top">
       <div class="route-label">실시간 경로 선택</div>
       <div class="update-date">updated 2026.04.24</div>
     </div>
-    <div class="route-title">삼일대로330 <span class="route-arrow">→</span> 원베일리</div>
+    <div class="route-title" id="routeTitle">삼일대로330 <span class="route-arrow">→</span> 원베일리</div>
     <div class="meta-row">
       <div class="time-info"><span id="currentTime">--:--</span> 기준</div>
       <button class="refresh-btn" id="refreshBtn" onclick="fetchAll()">
@@ -160,67 +177,122 @@
 </div>
 
 <script>
-// ── 설정 ──────────────────────────────────────────────────
-const KAKAO_KEY     = 'b94d7e07aed2c0765cd3e375e84b24b2';
-const SEOUL_KEY     = '6b5641785574776f3934586d49584d';
-const SEOUL_URL     = `http://openapi.seoul.go.kr:8088/${SEOUL_KEY}/json/TrafficInfo/1/500/`;
+const KAKAO_KEY = 'b94d7e07aed2c0765cd3e375e84b24b2';
+const SEOUL_KEY = '6b5641785574776f3934586d49584d';
+const SEOUL_URL = `http://openapi.seoul.go.kr:8088/${SEOUL_KEY}/json/TrafficInfo/1/500/`;
 
-// 출발 / 도착 (경도, 위도)
-const ORIGIN = { x: 126.9786, y: 37.5666 };  // 삼일대로330 을지로입구
-const DEST   = { x: 127.0064, y: 37.5082 };  // 원베일리 반포동
-
-const TUNNELS = [
+const ROUTE_CONFIGS = [
   {
-    id:1, name:'남산 1호 터널', sub:'삼일대로 → 이태원역 → 반포대교',
-    wp: { x:126.9816, y:37.5478 },
-    kakaoVia:'남산1호터널',
-    skw:['남산1호','남산 1호','삼일대로'],
-    segs:[
-      {d:1.0, fb:25, kw:['삼일대로','소월로']},
-      {d:1.6, fb:40, kw:['남산1호','남산 1호']},
-      {d:1.2, fb:28, kw:['이태원로','이태원역']},
-      {d:1.4, fb:50, kw:['반포대교']},
-      {d:1.8, fb:30, kw:['신반포로','반포로']},
+    originName: '삼일대로330',
+    destName: '원베일리',
+    kakaoOrigin: '삼일대로330',
+    kakaoDest: '원베일리아파트',
+    origin: { x: 126.9786, y: 37.5666 },
+    dest:   { x: 127.0064, y: 37.5082 },
+    destLabel: '원베일리까지',
+    speedLabel: '터널속도',
+    mockBases: [22, 18, 26],
+    mockSpeed: () => Math.floor(Math.random() * 30 + 20),
+    options: [
+      {
+        id:1, name:'남산 1호 터널', sub:'삼일대로 → 이태원역 → 반포대교',
+        wp: { x:126.9816, y:37.5478 },
+        kakaoVia: '남산1호터널',
+        skw: ['남산1호','남산 1호','삼일대로'],
+        segs: [
+          {d:1.0, fb:25, kw:['삼일대로','소월로']},
+          {d:1.6, fb:40, kw:['남산1호','남산 1호']},
+          {d:1.2, fb:28, kw:['이태원로','이태원역']},
+          {d:1.4, fb:50, kw:['반포대교']},
+          {d:1.8, fb:30, kw:['신반포로','반포로']},
+        ],
+      },
+      {
+        id:2, name:'남산 2호 터널', sub:'퇴계로 → 반포대교',
+        wp: { x:126.9944, y:37.5465 },
+        kakaoVia: '남산2호터널',
+        skw: ['남산2호','남산 2호','퇴계로'],
+        segs: [
+          {d:0.9, fb:25, kw:['삼일대로','퇴계로']},
+          {d:1.7, fb:45, kw:['남산2호','남산 2호']},
+          {d:0.9, fb:55, kw:['반포대교']},
+          {d:1.8, fb:35, kw:['반포로','신반포로']},
+        ],
+      },
+      {
+        id:3, name:'남산 3호 터널', sub:'회현사거리 → 이태원로 → 반포대교',
+        wp: { x:127.0042, y:37.5452 },
+        kakaoVia: '남산3호터널',
+        skw: ['남산3호','남산 3호','회현','이태원로'],
+        segs: [
+          {d:0.9, fb:22, kw:['소공로','명동','회현']},
+          {d:1.5, fb:42, kw:['남산3호','남산 3호']},
+          {d:1.1, fb:28, kw:['이태원로']},
+          {d:1.4, fb:50, kw:['반포대교']},
+          {d:1.8, fb:30, kw:['신반포로','반포로']},
+        ],
+      },
     ],
   },
   {
-    id:2, name:'남산 2호 터널', sub:'퇴계로 → 반포대교',
-    wp: { x:126.9944, y:37.5465 },
-    kakaoVia:'남산2호터널',
-    skw:['남산2호','남산 2호','퇴계로'],
-    segs:[
-      {d:0.9, fb:25, kw:['삼일대로','퇴계로']},
-      {d:1.7, fb:45, kw:['남산2호','남산 2호']},
-      {d:0.9, fb:55, kw:['반포대교']},
-      {d:1.8, fb:35, kw:['반포로','신반포로']},
-    ],
-  },
-  {
-    id:3, name:'남산 3호 터널', sub:'회현사거리 → 이태원로 → 반포대교',
-    wp: { x:127.0042, y:37.5452 },
-    kakaoVia:'남산3호터널',
-    skw:['남산3호','남산 3호','회현','이태원로'],
-    segs:[
-      {d:0.9, fb:22, kw:['소공로','명동','회현']},
-      {d:1.5, fb:42, kw:['남산3호','남산 3호']},
-      {d:1.1, fb:28, kw:['이태원로']},
-      {d:1.4, fb:50, kw:['반포대교']},
-      {d:1.8, fb:30, kw:['신반포로','반포로']},
+    originName: '원베일리',
+    destName: '고덕로210',
+    kakaoOrigin: '원베일리아파트',
+    kakaoDest: '고덕로210',
+    origin: { x: 127.0064, y: 37.5082 },
+    dest:   { x: 127.1487, y: 37.5535 },
+    destLabel: '고덕로까지',
+    speedLabel: '구간속도',
+    mockBases: [28, 32],
+    mockSpeed: () => Math.floor(Math.random() * 40 + 30),
+    options: [
+      {
+        id:1, name:'올림픽대로', sub:'반포IC → 올림픽대로 → 고덕로',
+        wp: { x:127.0857, y:37.5172 },
+        kakaoVia: '올림픽대로',
+        skw: ['올림픽대로'],
+        segs: [
+          {d:1.5, fb:40, kw:['신반포로','반포로','반포IC']},
+          {d:13.0, fb:65, kw:['올림픽대로']},
+          {d:3.5, fb:40, kw:['고덕로','강동']},
+        ],
+      },
+      {
+        id:2, name:'강변북로', sub:'반포대교 → 강변북로 → 고덕로',
+        wp: { x:127.0542, y:37.5427 },
+        kakaoVia: '강변북로',
+        skw: ['강변북로'],
+        segs: [
+          {d:2.5, fb:35, kw:['신반포로','반포대교']},
+          {d:12.0, fb:60, kw:['강변북로']},
+          {d:4.0, fb:35, kw:['고덕로','강동','천호대교']},
+        ],
+      },
     ],
   },
 ];
 
-// ── 카카오 모빌리티 길찾기 API ──────────────────────────
-async function kakaoRoute(t) {
+let currentRouteIdx = 0;
+let timer = null;
+
+function switchRoute(idx) {
+  if (idx === currentRouteIdx) return;
+  currentRouteIdx = idx;
+  document.querySelectorAll('.route-tab').forEach((t, i) => t.classList.toggle('active', i === idx));
+  if (timer) clearInterval(timer);
+  fetchAll();
+}
+
+async function kakaoRoute(cfg, opt) {
   const url =
     `https://apis-navi.kakaomobility.com/v1/directions` +
-    `?origin=${ORIGIN.x},${ORIGIN.y}` +
-    `&destination=${DEST.x},${DEST.y}` +
-    `&waypoints=${t.wp.x},${t.wp.y}` +
+    `?origin=${cfg.origin.x},${cfg.origin.y}` +
+    `&destination=${cfg.dest.x},${cfg.dest.y}` +
+    `&waypoints=${opt.wp.x},${opt.wp.y}` +
     `&priority=TIME&car_fuel=GASOLINE&car_hipass=false`;
 
   const r = await fetch(url, {
-    headers:{ Authorization:`KakaoAK ${KAKAO_KEY}` },
+    headers: { Authorization: `KakaoAK ${KAKAO_KEY}` },
     signal: AbortSignal.timeout(8000),
   });
   if (!r.ok) throw new Error(`kakao ${r.status}`);
@@ -234,66 +306,67 @@ async function kakaoRoute(t) {
   };
 }
 
-// ── 서울 도로소통 API (터널 구간 속도) ─────────────────
 function seoulSpeed(items, kws) {
-  const m = items.find(i => kws.some(k => (i.ROAD_NAME||'').includes(k)));
+  const m = items.find(i => kws.some(k => (i.ROAD_NAME || '').includes(k)));
   return m ? Math.max(5, Math.round(+m.SPEED)) : null;
 }
 
-// ── fallback 구간합산 ───────────────────────────────────
 function fallback(t, items) {
-  let min = 0, tspeed = null;
+  let min = 0;
   t.segs.forEach(s => {
-    const m = items.find(i => s.kw.some(k => (i.ROAD_NAME||'').includes(k)));
+    const m = items.find(i => s.kw.some(k => (i.ROAD_NAME || '').includes(k)));
     const spd = m ? Math.max(5, Math.round(+m.SPEED)) : s.fb;
-    if (s.kw.some(k => k.includes('남산'))) tspeed = spd;
     min += (s.d / spd) * 60;
   });
-  return { totalTime: Math.round(min), tunnelSpeed: tspeed };
+  return { totalTime: Math.round(min), tunnelSpeed: seoulSpeed(items, t.skw) };
 }
 
-// ── 목업 ───────────────────────────────────────────────
-function mockData() {
-  return TUNNELS.map((t,i) => {
-    const base = [22,18,26][i];
-    const n = Math.floor((Math.random()-.5)*6);
-    return { ...t, totalTime:base+n, totalDist:null, tunnelSpeed:Math.floor(Math.random()*30+20), src:'mock' };
-  });
+function mockData(cfg) {
+  return cfg.options.map((t, i) => ({
+    ...t,
+    totalTime: cfg.mockBases[i] + Math.floor((Math.random() - .5) * 6),
+    totalDist: null,
+    tunnelSpeed: cfg.mockSpeed(),
+    src: 'mock',
+  }));
 }
 
-// ── 혼잡도 ─────────────────────────────────────────────
 function cong(spd) {
   if (!spd) return { label:'정보없음', cls:'badge-gray', color:'#5a6070' };
-  if (spd>=40) return { label:'원활', cls:'badge-green', color:'#22d98a' };
-  if (spd>=20) return { label:'서행', cls:'badge-yellow', color:'#f5c842' };
+  if (spd >= 50) return { label:'원활', cls:'badge-green', color:'#22d98a' };
+  if (spd >= 25) return { label:'서행', cls:'badge-yellow', color:'#f5c842' };
   return { label:'정체', cls:'badge-red', color:'#f04a6a' };
 }
 
-// ── 카드 렌더 ──────────────────────────────────────────
-function render(data) {
-  const sorted  = [...data].sort((a,b)=>(a.totalTime||99)-(b.totalTime||99));
+function render(cfg, data) {
+  const sorted  = [...data].sort((a, b) => (a.totalTime || 99) - (b.totalTime || 99));
   const recId   = sorted[0]?.id;
   const recTime = sorted[0]?.totalTime;
-  const isKakao = data.some(d=>d.src==='kakao');
-  const isMock  = data.every(d=>d.src==='mock');
+  const isKakao = data.some(d => d.src === 'kakao');
+  const isMock  = data.every(d => d.src === 'mock');
+
+  // 헤더 타이틀
+  document.getElementById('routeTitle').innerHTML =
+    `${cfg.originName} <span class="route-arrow">→</span> ${cfg.destName}`;
 
   // 출처 태그
   document.getElementById('sourceWrap').innerHTML = isKakao
     ? `<span class="source-tag kakao">🟡 카카오 모빌리티 실시간</span>`
-    : isMock ? `<span class="source-tag">⚠ 시뮬레이션</span>`
-             : `<span class="source-tag">서울 도로소통 합산</span>`;
+    : isMock
+      ? `<span class="source-tag">⚠ 시뮬레이션</span>`
+      : `<span class="source-tag">서울 도로소통 합산</span>`;
 
   const wrap = document.getElementById('cardsContainer');
   wrap.innerHTML = '';
 
   data.forEach(t => {
-    const c      = cong(t.tunnelSpeed);
-    const isRec  = t.id === recId;
-    const extra  = (!isRec && t.totalTime && recTime) ? t.totalTime - recTime : 0;
-    const barW   = t.tunnelSpeed ? Math.min((t.tunnelSpeed/80)*100,100) : 0;
+    const c     = cong(t.tunnelSpeed);
+    const isRec = t.id === recId;
+    const extra = (!isRec && t.totalTime && recTime) ? t.totalTime - recTime : 0;
+    const barW  = t.tunnelSpeed ? Math.min((t.tunnelSpeed / 100) * 100, 100) : 0;
 
     const card = document.createElement('div');
-    card.className = `card${isRec?' recommended':''}`;
+    card.className = `card${isRec ? ' recommended' : ''}`;
     card.style.setProperty('--status-color', c.color);
     card.innerHTML = `
       <div class="card-top">
@@ -302,28 +375,28 @@ function render(data) {
           <div class="tunnel-sub">${t.sub}</div>
         </div>
         <div class="badges">
-          ${isRec?'<span class="badge-rec">✓ 추천</span>':''}
+          ${isRec ? '<span class="badge-rec">✓ 추천</span>' : ''}
           <span class="badge-cong ${c.cls}">${c.label}</span>
         </div>
       </div>
       <div class="card-stats">
         <div class="stat">
-          <div class="stat-label">터널속도</div>
+          <div class="stat-label">${cfg.speedLabel}</div>
           <div class="stat-value" style="color:${c.color}">
-            ${t.tunnelSpeed??'--'}<span class="stat-unit">km/h</span>
+            ${t.tunnelSpeed ?? '--'}<span class="stat-unit">km/h</span>
           </div>
         </div>
-        <div class="stat${isRec?' hl':''}">
-          <div class="stat-label">원베일리까지</div>
-          <div class="stat-value" style="${isRec?'color:var(--green)':''}">
-            ${t.totalTime??'--'}<span class="stat-unit">분</span>
+        <div class="stat${isRec ? ' hl' : ''}">
+          <div class="stat-label">${cfg.destLabel}</div>
+          <div class="stat-value" style="${isRec ? 'color:var(--green)' : ''}">
+            ${t.totalTime ?? '--'}<span class="stat-unit">분</span>
           </div>
         </div>
         <div class="stat">
-          <div class="stat-label">${isRec?'거리':'차이'}</div>
-          <div class="stat-value" style="font-size:15px;color:${isRec?'var(--green)':'var(--text-muted)'}">
+          <div class="stat-label">${isRec ? '거리' : '차이'}</div>
+          <div class="stat-value" style="font-size:15px;color:${isRec ? 'var(--green)' : 'var(--text-muted)'}">
             ${isRec
-              ? (t.totalDist?`${t.totalDist}<span class="stat-unit">km</span>`:'최단')
+              ? (t.totalDist ? `${t.totalDist}<span class="stat-unit">km</span>` : '최단')
               : `+${extra}<span class="stat-unit">분</span>`}
           </div>
         </div>
@@ -335,66 +408,63 @@ function render(data) {
   });
 
   // 요약
-  const rec  = data.find(t=>t.id===recId);
-  const rc   = cong(rec?.tunnelSpeed);
+  const rec = data.find(t => t.id === recId);
+  const rc  = cong(rec?.tunnelSpeed);
   document.getElementById('summaryText').innerHTML =
     `지금은 <strong>${rec?.name}</strong> 경유가 가장 빠릅니다.<br>` +
-    `원베일리까지 약 <strong>${rec?.totalTime??'--'}분</strong>` +
+    `${cfg.destName}까지 약 <strong>${rec?.totalTime ?? '--'}분</strong>` +
     (rec?.totalDist ? ` · ${rec.totalDist}km` : '') +
-    ` · 터널 ${rc.label}`;
+    ` · ${rc.label}`;
 
   // 카카오맵 버튼
-  const via = encodeURIComponent(rec?.kakaoVia||'남산2호터널');
+  const via = encodeURIComponent(rec?.kakaoVia || cfg.options[0].kakaoVia);
   document.getElementById('mapBtn').href =
-    `https://map.kakao.com/?sName=${encodeURIComponent('삼일대로330')}&eName=${encodeURIComponent('원베일리아파트')}&via=${via}`;
+    `https://map.kakao.com/?sName=${encodeURIComponent(cfg.kakaoOrigin)}&eName=${encodeURIComponent(cfg.kakaoDest)}&via=${via}`;
 }
 
-// ── 메인 ───────────────────────────────────────────────
 async function fetchAll() {
+  const cfg = ROUTE_CONFIGS[currentRouteIdx];
   const btn = document.getElementById('refreshBtn');
   btn.classList.add('spinning');
-  ['mockBanner','errorBanner','infoBanner'].forEach(id=>document.getElementById(id).classList.remove('active'));
+  ['mockBanner', 'errorBanner', 'infoBanner'].forEach(id => document.getElementById(id).classList.remove('active'));
   document.getElementById('loadingOverlay').classList.add('active');
   document.getElementById('currentTime').textContent =
-    new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+    new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
 
-  // 카카오 3경로 + 서울 속도 병렬 호출
   const [kakaoRes, seoulItems] = await Promise.all([
-    Promise.allSettled(TUNNELS.map(t => kakaoRoute(t))),
-    fetch(SEOUL_URL, {signal:AbortSignal.timeout(5000)})
-      .then(r=>r.json()).then(j=>j?.TrafficInfo?.row||[]).catch(()=>[]),
+    Promise.allSettled(cfg.options.map(t => kakaoRoute(cfg, t))),
+    fetch(SEOUL_URL, { signal: AbortSignal.timeout(5000) })
+      .then(r => r.json()).then(j => j?.TrafficInfo?.row || []).catch(() => []),
   ]);
 
-  const allFailed = kakaoRes.every(r=>r.status==='rejected');
+  const allFailed = kakaoRes.every(r => r.status === 'rejected');
 
   if (!allFailed) {
-    const tunnelData = TUNNELS.map((t,i) => {
+    const data = cfg.options.map((t, i) => {
       const tspd = seoulSpeed(seoulItems, t.skw);
       if (kakaoRes[i].status === 'fulfilled') {
         const v = kakaoRes[i].value;
-        // 터널 속도: 서울 API 값 우선, 없으면 카카오 시간 역산
-        const spd = tspd ?? Math.min(80, Math.round(([1.6,1.7,1.5][i] / (v.totalTime*0.25)) * 60));
-        return { ...t, totalTime:v.totalTime, totalDist:v.totalDist, tunnelSpeed:spd, src:'kakao' };
+        return { ...t, totalTime: v.totalTime, totalDist: v.totalDist, tunnelSpeed: tspd, src: 'kakao' };
       } else {
         const fb = fallback(t, seoulItems);
-        return { ...t, totalTime:fb.totalTime, totalDist:null, tunnelSpeed:tspd??fb.tunnelSpeed, src:'seoul' };
+        return { ...t, totalTime: fb.totalTime, totalDist: null, tunnelSpeed: tspd ?? fb.tunnelSpeed, src: 'seoul' };
       }
     });
-    render(tunnelData);
-    const failN = kakaoRes.filter(r=>r.status==='rejected').length;
+    render(cfg, data);
+    const failN = kakaoRes.filter(r => r.status === 'rejected').length;
     if (failN) showInfo(`${failN}개 경로는 구간 합산으로 대체`);
 
   } else if (seoulItems.length) {
-    const tunnelData = TUNNELS.map(t => {
+    const data = cfg.options.map(t => {
       const fb = fallback(t, seoulItems);
-      return { ...t, ...fb, totalDist:null, src:'seoul' };
+      return { ...t, ...fb, totalDist: null, src: 'seoul' };
     });
-    render(tunnelData);
+    render(cfg, data);
     showInfo('카카오 연결 실패 — 서울 도로소통 합산 표시');
 
   } else {
     document.getElementById('mockBanner').classList.add('active');
-    render(mockData());
+    render(cfg, mockData(cfg));
   }
 
   document.getElementById('loadingOverlay').classList.remove('active');
@@ -404,18 +474,18 @@ async function fetchAll() {
 
 function showInfo(msg) {
   const el = document.getElementById('infoBanner');
-  el.textContent = msg; el.classList.add('active');
+  el.textContent = msg;
+  el.classList.add('active');
 }
 
-let timer = null;
 function startCountdown() {
   if (timer) clearInterval(timer);
   let s = 30;
   const el = document.getElementById('autoRefreshText');
   el.textContent = `${s}초 후 자동 갱신`;
-  timer = setInterval(()=>{
+  timer = setInterval(() => {
     s--;
-    if (s<=0) { clearInterval(timer); fetchAll(); }
+    if (s <= 0) { clearInterval(timer); fetchAll(); }
     else el.textContent = `${s}초 후 자동 갱신`;
   }, 1000);
 }
