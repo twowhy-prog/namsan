@@ -144,6 +144,7 @@
   <div class="route-tabs">
     <button class="route-tab active" id="tab0" onclick="switchRoute(0)">삼일대로330<br>→ 원베일리</button>
     <button class="route-tab" id="tab1" onclick="switchRoute(1)">원베일리<br>→ 고덕로210</button>
+    <button class="route-tab" id="tab2" onclick="switchRoute(2)">원베일리<br>→ 삼일대로330</button>
   </div>
 
   <div class="header">
@@ -271,6 +272,48 @@ const ROUTE_CONFIGS = [
           {d:2.5, fb:35, kw:['신반포로','반포대교']},
           {d:12.0, fb:60, kw:['강변북로']},
           {d:4.0, fb:35, kw:['고덕로','강동','천호대교']},
+        ],
+      },
+    ],
+  },
+  {
+    originName: '원베일리',
+    destName: '삼일대로330',
+    kakaoOrigin: '반포대교남단 한강시민공원입구',
+    kakaoDest: '삼일대로330',
+    origin: { x: 127.0044, y: 37.5097 },
+    dest:   { x: 126.9786, y: 37.5666 },
+    destLabel: '삼일대로까지',
+    speedLabel: '터널속도',
+    mockBases: [20, 24],
+    mockSpeed: () => Math.floor(Math.random() * 30 + 20),
+    options: [
+      {
+        id:1, name:'남산 1호 터널', sub:'반포대교 → 이태원역 → 삼일대로',
+        wp: { x:126.9826, y:37.5443 },
+        segDist:1.6, segRatio:0.25, maxSpd:60,
+        kakaoVia: '남산1호터널',
+        skw: ['남산1호','남산 1호','삼일대로'],
+        segs: [
+          {d:1.8, fb:30, kw:['신반포로','반포로']},
+          {d:1.4, fb:50, kw:['반포대교']},
+          {d:1.2, fb:28, kw:['이태원로','이태원역']},
+          {d:1.6, fb:40, kw:['남산1호','남산 1호']},
+          {d:1.0, fb:25, kw:['소월로','삼일대로']},
+        ],
+      },
+      {
+        id:2, name:'남산 3호 터널', sub:'반포대교 → 이태원로 → 회현 → 삼일대로',
+        wp: { x:127.0048, y:37.5453 },
+        segDist:1.5, segRatio:0.25, maxSpd:60,
+        kakaoVia: '남산3호터널',
+        skw: ['남산3호','남산 3호','회현','이태원로'],
+        segs: [
+          {d:1.8, fb:30, kw:['신반포로','반포로']},
+          {d:1.4, fb:50, kw:['반포대교']},
+          {d:1.1, fb:28, kw:['이태원로']},
+          {d:1.5, fb:42, kw:['남산3호','남산 3호']},
+          {d:0.9, fb:22, kw:['소공로','명동','회현']},
         ],
       },
     ],
