@@ -349,6 +349,20 @@ let currentRouteIdx = 0;
 let timer = null;
 let gpsOrigin = null;
 let gpsActive = false;
+let gpsShortName = null;
+let gpsFullAddress = null;
+
+async function reverseGeocode(lon, lat) {
+  const url = `https://apis.openapi.sk.com/tmap/geo/reversegeocoding?version=1&lon=${lon}&lat=${lat}&reqCoordType=WGS84GEO&resCoordType=WGS84GEO&addressType=A10`;
+  const r = await fetch(url, { headers: { appKey: TMAP_KEY }, signal: AbortSignal.timeout(5000) });
+  if (!r.ok) return null;
+  const j = await r.json();
+  const info = j?.addressInfo;
+  if (!info) return null;
+  const short = info.buildingName || info.eupmyundong || info.emdName || null;
+  const full = info.fullAddress || null;
+  return { short, full };
+}
 
 function setGpsUi(state) {
   const btn = document.getElementById('gpsBtn');
@@ -356,7 +370,9 @@ function setGpsUi(state) {
   btn.classList.remove('active', 'loading');
   if (state === 'active') {
     btn.classList.add('active');
-    btn.innerHTML = '<span class="gps-dot"></span>현재 위치';
+    const btnLabel = gpsShortName || '현재 위치';
+    btn.innerHTML = `<span class="gps-dot"></span>${btnLabel}`;
+    lbl.textContent = `📍 ${gpsFullAddress || gpsShortName || '현재 위치'}에서 출발`;
     lbl.classList.add('active');
   } else if (state === 'loading') {
     btn.classList.add('loading');
@@ -372,6 +388,8 @@ async function toggleGps() {
   if (gpsActive) {
     gpsOrigin = null;
     gpsActive = false;
+    gpsShortName = null;
+    gpsFullAddress = null;
     setGpsUi('off');
     fetchAll();
     return;
@@ -389,11 +407,16 @@ async function toggleGps() {
     );
     gpsOrigin = { x: pos.coords.longitude, y: pos.coords.latitude };
     gpsActive = true;
+    const geo = await reverseGeocode(pos.coords.longitude, pos.coords.latitude).catch(() => null);
+    gpsShortName = geo?.short || null;
+    gpsFullAddress = geo?.full || null;
     setGpsUi('active');
     fetchAll();
   } catch (err) {
     gpsOrigin = null;
     gpsActive = false;
+    gpsShortName = null;
+    gpsFullAddress = null;
     setGpsUi('off');
     const msgs = { 1: '위치 권한이 거부되었습니다.', 2: '위치를 확인할 수 없습니다.', 3: '위치 확인 시간이 초과되었습니다.' };
     showInfo(msgs[err.code] || '위치를 가져오지 못했습니다.');
@@ -484,7 +507,7 @@ function render(cfg, data) {
   const isMock  = data.every(d => d.src === 'mock');
 
   // 헤더 타이틀
-  const originLabel = gpsActive ? '현재 위치' : cfg.originName;
+  const originLabel = gpsActive ? (gpsShortName || '현재 위치') : cfg.originName;
   document.getElementById('routeTitle').innerHTML =
     `${originLabel} <span class="route-arrow">→</span> ${cfg.destName}`;
 
