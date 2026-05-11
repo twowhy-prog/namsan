@@ -408,22 +408,30 @@ function switchRoute(idx) {
   fetchAll();
 }
 
+function sqDist(a, b) {
+  const dx = a.x - b.x, dy = a.y - b.y;
+  return dx * dx + dy * dy;
+}
+
 async function tmapRoute(cfg, opt, originOverride) {
   const origin = originOverride || cfg.origin;
+  // GPS 사용 시 경유지(터널 입구)가 목적지보다 멀면 이미 지난 것 → passList 생략
+  const skipWp = originOverride && sqDist(originOverride, cfg.dest) < sqDist(opt.wp, cfg.dest);
+  const body = {
+    startX: String(origin.x),
+    startY: String(origin.y),
+    endX: String(cfg.dest.x),
+    endY: String(cfg.dest.y),
+    reqCoordType: 'WGS84GEO',
+    resCoordType: 'WGS84GEO',
+    searchOption: '1',
+    trafficInfo: 'Y',
+  };
+  if (!skipWp) body.passList = `${opt.wp.x},${opt.wp.y}`;
   const r = await fetch('https://apis.openapi.sk.com/tmap/routes?version=1', {
     method: 'POST',
     headers: { appKey: TMAP_KEY, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      startX: String(origin.x),
-      startY: String(origin.y),
-      endX: String(cfg.dest.x),
-      endY: String(cfg.dest.y),
-      passList: `${opt.wp.x},${opt.wp.y}`,
-      reqCoordType: 'WGS84GEO',
-      resCoordType: 'WGS84GEO',
-      searchOption: '1',
-      trafficInfo: 'Y',
-    }),
+    body: JSON.stringify(body),
     signal: AbortSignal.timeout(8000),
   });
   if (!r.ok) throw new Error(`tmap ${r.status}`);
