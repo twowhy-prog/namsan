@@ -122,6 +122,25 @@
   .map-btn:hover { opacity:.9; } .map-btn:active { transform:scale(.99); }
   .auto-refresh { text-align:center; font-size:11px; font-family:'DM Mono',monospace; color:var(--text-muted); margin-top:16px; }
 
+  /* GPS 버튼 */
+  .gps-btn {
+    background:var(--surface2); border:1px solid var(--border); color:var(--text-dim);
+    border-radius:8px; padding:6px 11px; font-size:12px; font-family:'Noto Sans KR',sans-serif;
+    cursor:pointer; display:flex; align-items:center; gap:5px; transition:all .2s; white-space:nowrap;
+  }
+  .gps-btn:hover:not(.active):not(.loading) { color:var(--text); }
+  .gps-btn.active { border-color:var(--green); color:var(--green); background:rgba(34,217,138,.08); }
+  .gps-btn.loading { border-color:var(--yellow); color:var(--yellow); pointer-events:none; }
+  .gps-dot { width:6px; height:6px; border-radius:50%; background:currentColor; display:inline-block; flex-shrink:0; }
+  .gps-btn.active .gps-dot { animation:gpsPulse 1.4s ease-in-out infinite; }
+  @keyframes gpsPulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+  .header-btns { display:flex; gap:6px; align-items:center; }
+  .gps-origin-label {
+    display:none; font-size:11px; font-family:'DM Mono',monospace;
+    color:var(--green); margin-top:5px; letter-spacing:.04em;
+  }
+  .gps-origin-label.active { display:block; }
+
   /* 로딩 */
   .loading-overlay {
     display:none; position:fixed; inset:0; background:rgba(13,15,20,.85);
@@ -155,10 +174,16 @@
     <div class="route-title" id="routeTitle">삼일대로330 <span class="route-arrow">→</span> 원베일리</div>
     <div class="meta-row">
       <div class="time-info"><span id="currentTime">--:--</span> 기준</div>
-      <button class="refresh-btn" id="refreshBtn" onclick="fetchAll()">
-        <span class="refresh-icon">↻</span> 새로고침
-      </button>
+      <div class="header-btns">
+        <button class="gps-btn" id="gpsBtn" onclick="toggleGps()">
+          <span class="gps-dot"></span>현재 위치
+        </button>
+        <button class="refresh-btn" id="refreshBtn" onclick="fetchAll()">
+          <span class="refresh-icon">↻</span> 새로고침
+        </button>
+      </div>
     </div>
+    <div class="gps-origin-label" id="gpsOriginLabel">📍 현재 위치에서 출발</div>
   </div>
 
   <div class="notice warn" id="mockBanner">⚠ 시뮬레이션 데이터 표시 중</div>
@@ -322,6 +347,58 @@ const ROUTE_CONFIGS = [
 
 let currentRouteIdx = 0;
 let timer = null;
+let gpsOrigin = null;
+let gpsActive = false;
+
+function setGpsUi(state) {
+  const btn = document.getElementById('gpsBtn');
+  const lbl = document.getElementById('gpsOriginLabel');
+  btn.classList.remove('active', 'loading');
+  if (state === 'active') {
+    btn.classList.add('active');
+    btn.innerHTML = '<span class="gps-dot"></span>현재 위치';
+    lbl.classList.add('active');
+  } else if (state === 'loading') {
+    btn.classList.add('loading');
+    btn.innerHTML = '<span class="gps-dot"></span>위치 확인 중…';
+    lbl.classList.remove('active');
+  } else {
+    btn.innerHTML = '<span class="gps-dot"></span>현재 위치';
+    lbl.classList.remove('active');
+  }
+}
+
+async function toggleGps() {
+  if (gpsActive) {
+    gpsOrigin = null;
+    gpsActive = false;
+    setGpsUi('off');
+    fetchAll();
+    return;
+  }
+  if (!navigator.geolocation) {
+    showInfo('이 기기에서는 GPS를 사용할 수 없습니다.');
+    return;
+  }
+  setGpsUi('loading');
+  try {
+    const pos = await new Promise((resolve, reject) =>
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: true, timeout: 10000, maximumAge: 60000,
+      })
+    );
+    gpsOrigin = { x: pos.coords.longitude, y: pos.coords.latitude };
+    gpsActive = true;
+    setGpsUi('active');
+    fetchAll();
+  } catch (err) {
+    gpsOrigin = null;
+    gpsActive = false;
+    setGpsUi('off');
+    const msgs = { 1: '위치 권한이 거부되었습니다.', 2: '위치를 확인할 수 없습니다.', 3: '위치 확인 시간이 초과되었습니다.' };
+    showInfo(msgs[err.code] || '위치를 가져오지 못했습니다.');
+  }
+}
 
 function switchRoute(idx) {
   if (idx === currentRouteIdx) return;
@@ -331,13 +408,14 @@ function switchRoute(idx) {
   fetchAll();
 }
 
-async function tmapRoute(cfg, opt) {
+async function tmapRoute(cfg, opt, originOverride) {
+  const origin = originOverride || cfg.origin;
   const r = await fetch('https://apis.openapi.sk.com/tmap/routes?version=1', {
     method: 'POST',
     headers: { appKey: TMAP_KEY, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      startX: String(cfg.origin.x),
-      startY: String(cfg.origin.y),
+      startX: String(origin.x),
+      startY: String(origin.y),
       endX: String(cfg.dest.x),
       endY: String(cfg.dest.y),
       passList: `${opt.wp.x},${opt.wp.y}`,
@@ -398,8 +476,9 @@ function render(cfg, data) {
   const isMock  = data.every(d => d.src === 'mock');
 
   // 헤더 타이틀
+  const originLabel = gpsActive ? '현재 위치' : cfg.originName;
   document.getElementById('routeTitle').innerHTML =
-    `${cfg.originName} <span class="route-arrow">→</span> ${cfg.destName}`;
+    `${originLabel} <span class="route-arrow">→</span> ${cfg.destName}`;
 
   // 출처 태그
   document.getElementById('sourceWrap').innerHTML = isTmap
@@ -483,8 +562,9 @@ async function fetchAll() {
   document.getElementById('currentTime').textContent =
     new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
 
+  const originOverride = gpsActive && gpsOrigin ? gpsOrigin : null;
   const [kakaoRes, seoulItems] = await Promise.all([
-    Promise.allSettled(cfg.options.map(t => tmapRoute(cfg, t))),
+    Promise.allSettled(cfg.options.map(t => tmapRoute(cfg, t, originOverride))),
     fetch(SEOUL_URL, { signal: AbortSignal.timeout(5000) })
       .then(r => r.json()).then(j => j?.TrafficInfo?.row || []).catch(() => []),
   ]);
