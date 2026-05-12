@@ -207,6 +207,12 @@ const TMAP_KEY = 'tLkO3fXgPw2SfZ68amB1sa5ETK2WiYBL2RmuOV62';
 const SEOUL_KEY = '6b5641785574776f3934586d49584d';
 const SEOUL_URL = `https://openapi.seoul.go.kr:8443/${SEOUL_KEY}/json/TrafficInfo/1/500/`;
 
+function distKm(a, b) {
+  const dx = (a.x - b.x) * 88.8;
+  const dy = (a.y - b.y) * 111.0;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
 const ROUTE_CONFIGS = [
   {
     originName: '삼일대로330',
@@ -467,6 +473,29 @@ async function tmapRoute(cfg, opt, originOverride) {
   };
 }
 
+async function tmapDirect(cfg, origin) {
+  const body = {
+    startX: String(origin.x), startY: String(origin.y),
+    endX: String(cfg.dest.x), endY: String(cfg.dest.y),
+    reqCoordType: 'WGS84GEO', resCoordType: 'WGS84GEO',
+    searchOption: '0', trafficInfo: 'Y',
+  };
+  const r = await fetch('https://apis.openapi.sk.com/tmap/routes?version=1', {
+    method: 'POST',
+    headers: { appKey: TMAP_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!r.ok) throw new Error(`tmap ${r.status}`);
+  const j = await r.json();
+  const props = j.features?.[0]?.properties;
+  if (!props) throw new Error('no route');
+  return {
+    totalTime: Math.round(props.totalTime / 60),
+    totalDist: Math.round(props.totalDistance / 100) / 10,
+  };
+}
+
 function seoulSpeed(items, kws) {
   const m = items.find(i => kws.some(k => (i.ROAD_NAME || '').includes(k)));
   return m ? Math.max(5, Math.round(+m.SPEED)) : null;
@@ -572,16 +601,23 @@ function render(cfg, data) {
   // 요약
   const rec = data.find(t => t.id === recId);
   const rc  = cong(rec?.tunnelSpeed);
-  document.getElementById('summaryText').innerHTML =
-    `지금은 <strong>${rec?.name}</strong> 경유가 가장 빠릅니다.<br>` +
-    `${cfg.destName}까지 약 <strong>${rec?.totalTime ?? '--'}분</strong>` +
-    (rec?.totalDist ? ` · ${rec.totalDist}km` : '') +
-    ` · ${rc.label}`;
+  const isDirect = data.some(d => d.isDirect);
+  document.getElementById('summaryText').innerHTML = isDirect
+    ? `현재 위치에서 <strong>${cfg.destName}</strong>까지<br>` +
+      `약 <strong>${rec?.totalTime ?? '--'}분</strong>` +
+      (rec?.totalDist ? ` · ${rec.totalDist}km` : '')
+    : `지금은 <strong>${rec?.name}</strong> 경유가 가장 빠릅니다.<br>` +
+      `${cfg.destName}까지 약 <strong>${rec?.totalTime ?? '--'}분</strong>` +
+      (rec?.totalDist ? ` · ${rec.totalDist}km` : '') +
+      ` · ${rc.label}`;
 
   // 카카오맵 버튼
-  const via = encodeURIComponent(rec?.kakaoVia || cfg.options[0].kakaoVia);
-  document.getElementById('mapBtn').href =
-    `https://map.kakao.com/?sName=${encodeURIComponent(cfg.kakaoOrigin)}&eName=${encodeURIComponent(cfg.kakaoDest)}&via=${via}`;
+  const kakaoOriginName = gpsActive
+    ? encodeURIComponent(gpsFullAddress || gpsShortName || cfg.kakaoOrigin)
+    : encodeURIComponent(cfg.kakaoOrigin);
+  const kakaoBase = `https://map.kakao.com/?sName=${kakaoOriginName}&eName=${encodeURIComponent(cfg.kakaoDest)}`;
+  const via = !isDirect && (rec?.kakaoVia || cfg.options[0]?.kakaoVia);
+  document.getElementById('mapBtn').href = via ? `${kakaoBase}&via=${encodeURIComponent(via)}` : kakaoBase;
 }
 
 async function fetchAll() {
@@ -594,6 +630,38 @@ async function fetchAll() {
     new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
 
   const originOverride = gpsActive && gpsOrigin ? gpsOrigin : null;
+
+  // 삼일대로330→원베일리 섹션에서, GPS 위치가 출발지 및 모든 터널 입구로부터 2km 초과인 경우
+  // 터널 경유 없이 현재 위치 기준 최적 경로만 안내
+  if (currentRouteIdx === 0 && originOverride) {
+    const farFromOrigin  = distKm(originOverride, cfg.origin) > 2;
+    const farFromTunnels = cfg.options.every(opt => distKm(originOverride, opt.wp) > 2);
+    if (farFromOrigin && farFromTunnels) {
+      try {
+        const result = await tmapDirect(cfg, originOverride);
+        render(cfg, [{
+          id: 1, isDirect: true,
+          name: '최적 경로',
+          sub: `${gpsShortName || '현재 위치'} → ${cfg.destName} 직접 안내`,
+          kakaoVia: null, skw: [], segs: [], segDist: 0, segRatio: 1, maxSpd: 80,
+          totalTime: result.totalTime, totalDist: result.totalDist,
+          tunnelSpeed: null, src: 'tmap',
+        }]);
+        showInfo('남산터널 반경 2km 이상 — 현재 위치 기준 최적 경로 표시');
+      } catch (e) {
+        document.getElementById('mockBanner').classList.add('active');
+        render(cfg, [{ ...cfg.options[0], isDirect: true,
+          name: '최적 경로', sub: `${gpsShortName || '현재 위치'} → ${cfg.destName}`,
+          totalTime: cfg.mockBases[0], totalDist: null, tunnelSpeed: null, src: 'mock',
+        }]);
+      }
+      document.getElementById('loadingOverlay').classList.remove('active');
+      btn.classList.remove('spinning');
+      startCountdown();
+      return;
+    }
+  }
+
   const [kakaoRes, seoulItems] = await Promise.all([
     Promise.allSettled(cfg.options.map(t => tmapRoute(cfg, t, originOverride))),
     fetch(SEOUL_URL, { signal: AbortSignal.timeout(5000) })
