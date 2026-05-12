@@ -65,6 +65,7 @@
     border-radius:6px; padding:2px 7px; margin-bottom:12px;
   }
   .source-tag.kakao { border-color:rgba(254,229,0,.3); color:#c8b800; background:rgba(254,229,0,.05); }
+  .source-tag.tmap  { border-color:rgba(255,0,60,.3);  color:#ff3c3c; background:rgba(255,0,60,.05); }
 
   /* 카드 */
   .cards { display:flex; flex-direction:column; gap:12px; margin-bottom:20px; }
@@ -513,7 +514,7 @@ function render(cfg, data) {
 
   // 출처 태그
   document.getElementById('sourceWrap').innerHTML = isTmap
-    ? `<span class="source-tag kakao">🔵 T맵 실시간</span>`
+    ? `<span class="source-tag tmap">🔴 T맵 실시간</span>`
     : isMock
       ? `<span class="source-tag">⚠ 시뮬레이션</span>`
       : `<span class="source-tag">서울 도로소통 합산</span>`;
@@ -624,7 +625,7 @@ async function fetchAll() {
       return { ...t, ...fb, totalDist: null, src: 'seoul' };
     });
     render(cfg, data);
-    showInfo('카카오 연결 실패 — 서울 도로소통 합산 표시');
+    showInfo('T맵 연결 실패 — 서울 도로소통 합산 표시');
 
   } else {
     document.getElementById('mockBanner').classList.add('active');
